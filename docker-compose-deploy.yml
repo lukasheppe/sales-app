@@ -1,0 +1,61 @@
+version: '3.5'
+
+services:
+  postgres:
+    image: heppe/salesapp-postgres
+    container_name: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret_password
+      PGDATA: /data/postgres
+    volumes:
+       - postgres:/data/postgres
+    networks:
+      - backend
+    restart: unless-stopped
+
+  frontend:
+    image: heppe/salesapp-frontend
+    container_name: frontend
+    networks:
+      - backend
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`localhost`)"
+      - "traefik.http.routers.frontend.entrypoints=web"
+
+  backend:
+    image: heppe/salesapp-backend
+    networks:
+     - backend
+    environment:
+     - DB_URL=postgresql://postgres:secret_password@postgres:5432/salesdb
+     - WAIT_HOSTS=postgres:5432
+    depends_on:
+      - "postgres"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.sales.rule=Host(`sales.localhost`)"
+      - "traefik.http.routers.sales.entrypoints=web"
+
+  reverse-proxy:
+    image: traefik:latest
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    networks:
+      - "backend"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+networks:
+    backend:
+        driver: bridge
+
+volumes:
+    postgres:
